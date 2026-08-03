@@ -209,6 +209,22 @@ http://127.0.0.1:7575
 djonehub open
 ```
 
+### Windows 实验版启动方式
+
+Windows 版支持通过参数或启动后输入 COM 口号，不需要配置文件：
+
+- `-port`：支持 `7`、`COM7`、`com7`（会自动归一化为 `COM7`），也支持直接传入完整串口名。
+- `-web-port`：网页监听端口，未传入时默认 `7575`。
+- `-listen-host`：监听地址主机部分，默认 `127.0.0.1`。
+
+示例：
+
+```powershell
+DJOneHub-Windows-amd64-*.exe -port 7 -web-port 7575
+```
+
+如果双击 exe 且未传 `-port`，程序会在控制台提示输入 COM 口号；直接回车则继续尝试自动检测串口。
+
 ## macOS 阻止打开时
 
 当前预览版没有使用 Apple Developer ID 公证签名。首次运行时，macOS 可能提示无法验证开发者或阻止程序启动。

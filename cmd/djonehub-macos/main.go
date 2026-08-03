@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"embed"
 	"encoding/base64"
@@ -212,11 +213,17 @@ type cellularPolicyStatus struct {
 func main() {
 	var port string
 	var listen string
+	var listenHost string
+	var webPort int
 	var demo bool
-	flag.StringVar(&port, "port", "", "AT serial port; auto-detected when omitted")
+	flag.StringVar(&port, "port", "", "AT serial port (Windows supports 7/COM7/com7)")
 	flag.StringVar(&listen, "listen", "127.0.0.1:7575", "HTTP listen address")
+	flag.StringVar(&listenHost, "listen-host", "127.0.0.1", "HTTP listen host used with -web-port")
+	flag.IntVar(&webPort, "web-port", 7575, "HTTP listen port")
 	flag.BoolVar(&demo, "demo", false, "run the web UI with simulated modem data")
 	flag.Parse()
+
+	listen = normalizeListenAddress(listen, listenHost, webPort)
 
 	if demo {
 		instance := newDemoApp()
@@ -224,6 +231,11 @@ func main() {
 		serve(instance, listen)
 		return
 	}
+
+	if strings.TrimSpace(port) == "" {
+		port = promptForATPort()
+	}
+	port = normalizeATPortInput(port)
 
 	if strings.TrimSpace(port) == "" {
 		var err error
@@ -241,6 +253,7 @@ func main() {
 				smsReassembler:   smscodec.NewReassembler(),
 				callPollInterval: 3 * time.Second,
 			}
+
 			if usbDevice != nil {
 				log.Printf("DJI USB device detected without AT serial port: %s %s (%s:%s)",
 					usbDevice.Vendor, usbDevice.Product, usbDevice.VendorID, usbDevice.ProductID)
@@ -317,6 +330,63 @@ func main() {
 	go instance.syncGPSState()
 
 	serve(instance, listen)
+}
+
+func normalizeListenAddress(listen, host string, webPort int) string {
+	if flag.CommandLine.Lookup("listen") != nil && flag.CommandLine.Lookup("listen").Value.String() != "127.0.0.1:7575" {
+		return listen
+	}
+	if webPort <= 0 || webPort > 65535 {
+		webPort = 7575
+	}
+	host = strings.TrimSpace(host)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(webPort))
+}
+
+func promptForATPort() string {
+	fmt.Print("请输入 COM 口号（如 7 / COM7 / com7），直接回车继续自动检测：")
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		return ""
+	}
+	return scanner.Text()
+}
+
+func normalizeATPortInput(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	lower := strings.ToLower(value)
+	if lower == "com" {
+		return ""
+	}
+	if strings.HasPrefix(lower, "com") {
+		digits := strings.TrimSpace(value[3:])
+		if isPositivePortNumber(digits) {
+			return "COM" + digits
+		}
+	}
+	if isPositivePortNumber(value) {
+		return "COM" + value
+	}
+	return value
+}
+
+func isPositivePortNumber(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	n, err := strconv.Atoi(value)
+	return err == nil && n > 0
 }
 
 func (a *app) initUSBATESIMManager() {
